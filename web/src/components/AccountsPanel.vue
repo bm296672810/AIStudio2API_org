@@ -45,6 +45,7 @@ import ImportFilterBar, {
 } from './ImportFilterBar.vue'
 import LinkedText from './LinkedText.vue'
 import LoginViewer from './LoginViewer.vue'
+import AccountLiveViewer from './AccountLiveViewer.vue'
 import StagedRefreshIcon from './StagedRefreshIcon.vue'
 import UiCollapse from './UiCollapse.vue'
 import UiIcon from './UiIcon.vue'
@@ -66,6 +67,8 @@ const props = defineProps<{
   // models 与 cooldowns 是实时模型目录与模型冷却，供账户的模型对话框显示
   models: Model[]
   cooldowns: Cooldown[]
+  // serviceRunning 表示生成服务正在运行，常驻浏览器远程操作在该状态下可用
+  serviceRunning: boolean
 }>()
 
 const emit = defineEmits<{
@@ -782,6 +785,14 @@ function newViewID(): string {
 // openViewer 在登录任务带登录窗口 ID 时打开页内登录窗口
 function openViewer(task: AccountTask): void {
   if (task.view) viewerTaskID.value = task.id
+}
+
+// liveViewAccount 是打开远程操作窗口的账户，为空时窗口关闭
+const liveViewAccount = ref<Account | null>(null)
+
+// openLiveView 打开账户常驻浏览器的远程操作窗口
+function openLiveView(account: Account): void {
+  liveViewAccount.value = account
 }
 
 // cancelViewerTask 关闭登录窗口并取消它显示的登录
@@ -2058,6 +2069,22 @@ watch(
                 {{ t('accounts.verify') }}
               </button>
               <button
+                v-if="serviceRunning && account.enabled"
+                v-tooltip="t('accounts.liveViewOpen')"
+                type="button"
+                :class="[accountIconClass, 'hover:text-gray-200']"
+                :disabled="
+                  pendingAction !== '' ||
+                  refreshing.has(account.id) ||
+                  toggling.has(account.id) ||
+                  account.transition !== undefined
+                "
+                :aria-label="t('accounts.liveViewOpen')"
+                @click="openLiveView(account)"
+              >
+                <UiIcon name="remote" :size="15" />
+              </button>
+              <button
                 v-tooltip="t(queued.has(account.id) ? 'accounts.queued' : 'accounts.refresh')"
                 type="button"
                 :class="[accountIconClass, 'hover:text-gray-200']"
@@ -2151,6 +2178,14 @@ watch(
         @cancel="cancelViewerTask"
         @hide="viewerTaskID = ''"
         @close="viewerTaskID = ''"
+      />
+
+      <AccountLiveViewer
+        v-if="liveViewAccount !== null"
+        :key="liveViewAccount.id"
+        :account-id="liveViewAccount.id"
+        :account-label="liveViewAccount.label"
+        @close="liveViewAccount = null"
       />
 
       <Teleport to="body">
