@@ -917,6 +917,25 @@ go build -trimpath -o aistudio2api.exe ./cmd/aistudio2api
 go vet ./...
 ```
 
+### 版本与发布标签
+
+本仓库是 Mag1cFall/AIStudio2API 的下游 fork，发布标签按 `v<上游版本>-<fork 修订>` 编排，例如上游发布 `v0.3.15` 时本仓库首个自定义版本为 `v0.3.15-1.0`：
+
+- 上游版本：与上游仓库的发布标签一致，取数字点分三段；每次对齐上游新版本时更新
+- fork 修订：`<主版本>.<次版本>`，本仓库相对上游的改动递增，首个版本为 `1.0`
+- Git 标签、包文件名、程序内显示版本（ldflags 注入）、Docker 标签与 AppImage/deb 文件名均使用完整标签
+
+各平台数字版本字段只接受数字点分，按短横线拆分后取值：
+
+| 字段 | 取值 | `v0.3.15-1.0` 示例 |
+| --- | --- | --- |
+| Windows `ProductVersion` | 去掉前缀 v 的完整标签 | `0.3.15-1.0` |
+| Windows `FileVersion` | 上游三段补第四段 `.0` | `0.3.15.0` |
+| macOS `CFBundleShortVersionString`、`CFBundleVersion` | 短横线前的上游版本 | `0.3.15` |
+| Linux deb `version` | 去掉前缀 v 的完整标签 | `0.3.15-1.0` |
+
+标签含短横线时发布流程按预发布（prerelease）处理。
+
 桌面版以构建标签 `desktop` 编译，`internal/desktop` 用 Wails v3 创建窗口与系统托盘，发布构建同时加 `production` 标签。Linux 桌面版另加构建标签 `gtk3`，需要 `libgtk-3-dev` 与 `libwebkit2gtk-4.1-dev`，链接 glibc 版静态库 `linux-amd64-gnu`：
 
 ```powershell
