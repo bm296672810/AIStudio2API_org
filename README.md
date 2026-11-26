@@ -319,6 +319,22 @@ Windows 桌面版在命令行中运行以下命令时写作 `cmd /c start /wait 
 - 从该电脑 Chrome 导入的账户只能由这台电脑续签：命令上传这类账户后留在前台，立即并每 100 分钟向远程实例发送它们的新会话，失败时 5 分钟后重试；远程实例已删除账户或续签凭据失效时停止为该账户续签
 - 保持该窗口打开；重启电脑后运行 `aistudio2api setup --remote <地址> --renew` 恢复续签
 
+## Gemini Cookie 桥接
+
+启用后，本服务把本机账户的登录 Cookie 单向、定时推送到一个 Gemini-Web2API 实例，对方复用同一 Google 账号而无需再次登录。同步方向固定为本服务 → Gemini，本服务是登录态的属主。
+
+配置（写入 `.env` 或环境变量）：
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `GEMINI_BRIDGE_ENABLED` | `false` | 桥接总开关 |
+| `GEMINI_BRIDGE_ORIGIN` | `http://127.0.0.1:8007` | Gemini 实例地址，本机可用 HTTP，远程地址必须 HTTPS |
+| `GEMINI_BRIDGE_INTERVAL` | `10m` | 定时同步间隔，设备绑定账户按一半间隔推送 |
+| `GEMINI_BRIDGE_PAIRING_TOKEN` | 空 | 一次性配对令牌，在 Gemini 管理端生成；引导完成后可清空 |
+| `GEMINI_BRIDGE_INCLUDE` | 空 | 仅同步指定邮箱，逗号分隔；留空同步全部启用账户 |
+
+首次使用：在 Gemini 管理端生成配对令牌，填入 `GEMINI_BRIDGE_PAIRING_TOKEN` 并把 `GEMINI_BRIDGE_ENABLED` 置为 `true` 后启动本服务。桥接器为每个合格账户换取各自的长期续签凭据，保存在 `runtime/gemini-bridge.json`（权限 0600），随后按间隔自动续推，配对令牌即可清空。停用的账户不同步；缺少 `SAPISID` 或 `__Secure-1PSID` 的账户跳过。账户代理为空时使用全局 `PROXY`，两端需要相同的出口地址。
+
 ## API 使用
 
 ### OpenAI 兼容接口
