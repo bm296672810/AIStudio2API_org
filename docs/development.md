@@ -175,7 +175,7 @@ internal/promptdb/       Playground 对话的 SQLite 存储
 internal/sqlitedb/       SQLite 打开、按建表语句同步表结构与空闲页回收
 internal/pricing/        用量估算费用使用的 Gemini API 单价表
 internal/chromeauth/     Windows Chrome OAuth/DBSC 发现、导入和续签
-internal/geminibridge/   账户登录态向 Gemini-Web2API 的单向定时推送与续签凭据管理
+internal/geminibridge/   账户登录态向 Gemini-Web2API 的单向定时推送与续签凭据管理，对接与验证见 docs/gemini-bridge-verification.md
 internal/config/         全局配置的读取、校验和原子写回
 internal/i18n/           服务文案的翻译表、系统语言识别与控制台输出翻译
 internal/webui/          嵌入并提供 Vue 构建产物
