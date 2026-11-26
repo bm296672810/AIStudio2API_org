@@ -120,11 +120,19 @@ jobs:
         shell: bash
         run: |
           number=0.0.0
+          product=0.0.0
           link=""
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then number="${GITHUB_REF_NAME#v}"; link="-X github.com/Mag1cFall/AIStudio2API/internal/app.version=$GITHUB_REF_NAME"; fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            product="${GITHUB_REF_NAME#v}"
+            number="$product"
+            link="-X github.com/Mag1cFall/AIStudio2API/internal/app.version=$GITHUB_REF_NAME"
+            # FileVersion 只接受数字点分，fork 标签 v<上游>-<修订> 取短横线前的上游版本
+            if [[ "$number" == *-* ]]; then number="${number%%-*}"; fi
+          fi
+          file_version="${number}.0"
           mkdir -p bin
           CGO_ENABLED=0 go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.29
-          jq --arg v "$number" '.fixed.file_version = $v | .info["0000"].ProductVersion = $v' build/windows/info.json > bin/info.json
+          jq --arg fv "$file_version" --arg pv "$product" '.fixed.file_version = $fv | .info["0000"].ProductVersion = $pv' build/windows/info.json > bin/info.json
           wails3 generate syso -arch amd64 -icon build/windows/icon.ico -manifest build/windows/wails.exe.manifest -info bin/info.json -out cmd/aistudio2api/rsrc_windows_amd64.syso
           CC=x86_64-w64-mingw32-clang CXX=x86_64-w64-mingw32-clang++ GOOS=windows GOARCH=amd64 go build -mod=readonly -trimpath -tags desktop,production -ldflags="-s -w -H windowsgui -extldflags '-Wl,--gc-sections -Wl,--icf=safe' $link" -o bin/aistudio2api.exe ./cmd/aistudio2api
       - name: Package
@@ -201,6 +209,8 @@ jobs:
         run: |
           version="$GITHUB_REF_NAME"
           number="${version#v}"
+          # CFBundle 版本只接受数字点分，fork 标签 v<上游>-<修订> 取短横线前的上游版本
+          if [[ "$number" == *-* ]]; then number="${number%%-*}"; fi
           pack() {
             name="aistudio2api-${version}-darwin-$1"
             mkdir -p "dist/$name"
