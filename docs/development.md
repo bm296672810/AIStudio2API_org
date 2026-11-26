@@ -175,6 +175,7 @@ internal/promptdb/       Playground 对话的 SQLite 存储
 internal/sqlitedb/       SQLite 打开、按建表语句同步表结构与空闲页回收
 internal/pricing/        用量估算费用使用的 Gemini API 单价表
 internal/chromeauth/     Windows Chrome OAuth/DBSC 发现、导入和续签
+internal/geminibridge/   账户登录态向 Gemini-Web2API 的单向定时推送与续签凭据管理
 internal/config/         全局配置的读取、校验和原子写回
 internal/i18n/           服务文案的翻译表、系统语言识别与控制台输出翻译
 internal/webui/          嵌入并提供 Vue 构建产物
@@ -383,6 +384,11 @@ Camoufox 运行中与服务的 WebDriver BiDi 连接断开时，服务最多等 
 | `WAA_BACKEND` | WAA 后端 | `spidermonkey` |
 | `MEDIA_OUTPUT` | 生成媒体的引用方式 | `inline` |
 | `MEDIA_BASE_URL` | 媒体 URL 的服务地址 | 空 |
+| `GEMINI_BRIDGE_ENABLED` | Gemini Cookie 桥接总开关 | `false` |
+| `GEMINI_BRIDGE_ORIGIN` | Gemini-Web2API 实例地址 | `http://127.0.0.1:8007` |
+| `GEMINI_BRIDGE_INTERVAL` | 桥接定时同步间隔 | `10m` |
+| `GEMINI_BRIDGE_PAIRING_TOKEN` | 一次性配对令牌 | 空 |
+| `GEMINI_BRIDGE_INCLUDE` | 仅同步的邮箱名单，逗号分隔 | 空 |
 
 各变量的取值与生效时机：
 

@@ -319,6 +319,22 @@ On Windows, run these commands for the desktop app as `cmd /c start /wait aistud
 - Only the computer that imported an account from its Chrome can renew that account: after uploading such accounts the command stays in the foreground, sends their new sessions to the remote instance right away and every 100 minutes, and retries 5 minutes after a failed renewal; it stops renewing an account once the remote instance has deleted it or its renewal credential is invalid
 - Keep that window open; after restarting the computer, run `aistudio2api setup --remote <address> --renew` to resume renewal
 
+## Gemini Cookie Bridge
+
+When enabled, the service pushes each local account's sign-in cookies to a Gemini-Web2API instance on a schedule in one direction, so the other side reuses the same Google account without signing in again. The direction is fixed from this service to Gemini, which treats this service as the owner of the sign-in state.
+
+Configuration (in `.env` or environment variables):
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `GEMINI_BRIDGE_ENABLED` | `false` | Master switch for the bridge |
+| `GEMINI_BRIDGE_ORIGIN` | `http://127.0.0.1:8007` | Gemini instance origin; HTTP is allowed for localhost, remote origins require HTTPS |
+| `GEMINI_BRIDGE_INTERVAL` | `10m` | Sync interval; device-bound accounts push at half the interval |
+| `GEMINI_BRIDGE_PAIRING_TOKEN` | empty | One-time pairing token generated in the Gemini console; can be cleared after bootstrap |
+| `GEMINI_BRIDGE_INCLUDE` | empty | Comma-separated emails to sync; empty syncs every enabled account |
+
+First use: generate a pairing token in the Gemini console, set it in `GEMINI_BRIDGE_PAIRING_TOKEN`, set `GEMINI_BRIDGE_ENABLED=true`, and start the service. The bridge exchanges a long-lived renewal credential for each eligible account and stores it in `runtime/gemini-bridge.json` (mode 0600), then renews automatically on the interval so the pairing token can be cleared. Disabled accounts are not synced; accounts missing `SAPISID` or `__Secure-1PSID` are skipped. An account without its own proxy falls back to the global `PROXY`, and both sides need the same egress address.
+
 ## API Usage
 
 ### OpenAI Compatible Interface

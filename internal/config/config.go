@@ -15,17 +15,19 @@ import (
 )
 
 const (
-	defaultAuthStates         = "auth"
-	defaultListenAddr         = "127.0.0.1:2048"
-	defaultPreviewListenAddr  = "127.0.0.1:2050"
-	defaultInitTimeout        = 2 * time.Minute
-	defaultRequestTimeout     = 30 * time.Minute
-	defaultWarmWorkerLimit    = 10
-	defaultMaxActiveWorkers   = 20
-	camoufoxWarmWorkerLimit   = 5
-	camoufoxMaxActiveWorkers  = 10
-	defaultWarmConcurrency    = 5
-	defaultAccountConcurrency = 2
+	defaultAuthStates           = "auth"
+	defaultListenAddr           = "127.0.0.1:2048"
+	defaultPreviewListenAddr    = "127.0.0.1:2050"
+	defaultInitTimeout          = 2 * time.Minute
+	defaultRequestTimeout       = 30 * time.Minute
+	defaultWarmWorkerLimit      = 10
+	defaultMaxActiveWorkers     = 20
+	camoufoxWarmWorkerLimit     = 5
+	camoufoxMaxActiveWorkers    = 10
+	defaultWarmConcurrency      = 5
+	defaultAccountConcurrency   = 2
+	defaultGeminiBridgeOrigin   = "http://127.0.0.1:8007"
+	defaultGeminiBridgeInterval = 10 * time.Minute
 )
 
 var configKeys = [...]string{
@@ -77,6 +79,11 @@ var configKeys = [...]string{
 	"REPLY_TOOL",
 	"USER_MESSAGE_REWRITE",
 	"THINKING_GUARD",
+	"GEMINI_BRIDGE_ENABLED",
+	"GEMINI_BRIDGE_ORIGIN",
+	"GEMINI_BRIDGE_INTERVAL",
+	"GEMINI_BRIDGE_PAIRING_TOKEN",
+	"GEMINI_BRIDGE_INCLUDE",
 }
 
 // LogFileMB 是单个日志文件的轮转大小
@@ -135,54 +142,59 @@ const DefaultContinuationPrompt = "Continue the assistant response after the fol
 
 // Config 保存服务的全局配置
 type Config struct {
-	AutoStart              bool
-	HideDockIcon           bool
-	RequestBodyLog         bool
-	LogFile                bool
-	LogMaxTotalMB          int
-	AdminAuthEnabled       bool
-	AdminUsername          string
-	AdminPassword          string
-	BuildNativeNonstream   bool
-	NonstreamKeepalive     bool
-	FakeStream             bool
-	YouTubeLinks           bool
-	StripThoughtSignatures bool
-	SearchModelAliases     bool
-	DiscoverHiddenModels   bool
-	GoogleSearch           bool
-	FirstEventHedge        string
-	FirstEventHedgeModels  string
-	FirstEventTimeout      string
-	ContinuationRewrite    bool
-	ContinuationPrompt     string
-	ReplyTool              bool
-	UserMessageRewrite     string
-	ThinkingGuard          bool
-	AuthStates             string
-	ListenAddr             string
-	PreviewListenAddr      string
-	ProxyAPIKey            string
-	APIKeyAccounts         string
-	Proxy                  string
-	InitTimeout            time.Duration
-	RequestTimeout         time.Duration
-	WarmWorkerLimit        int
-	MaxActiveWorkers       int
-	WarmStartupConcurrency int
-	PerAccountConcurrency  int
-	RoutingStrategy        string
-	AccountOrder           string
-	MaxAccountSwitches     int
-	AccountSwitchInterval  string
-	MaxQuotaSwitches       string
-	UpstreamChannels       []string
-	ModelMapping           string
-	ModelChannels          string
-	ModelAccounts          string
-	WAABackend             string
-	MediaOutput            string
-	MediaBaseURL           string
+	AutoStart                bool
+	HideDockIcon             bool
+	RequestBodyLog           bool
+	LogFile                  bool
+	LogMaxTotalMB            int
+	AdminAuthEnabled         bool
+	AdminUsername            string
+	AdminPassword            string
+	BuildNativeNonstream     bool
+	NonstreamKeepalive       bool
+	FakeStream               bool
+	YouTubeLinks             bool
+	StripThoughtSignatures   bool
+	SearchModelAliases       bool
+	DiscoverHiddenModels     bool
+	GoogleSearch             bool
+	FirstEventHedge          string
+	FirstEventHedgeModels    string
+	FirstEventTimeout        string
+	ContinuationRewrite      bool
+	ContinuationPrompt       string
+	ReplyTool                bool
+	UserMessageRewrite       string
+	ThinkingGuard            bool
+	AuthStates               string
+	ListenAddr               string
+	PreviewListenAddr        string
+	ProxyAPIKey              string
+	APIKeyAccounts           string
+	Proxy                    string
+	InitTimeout              time.Duration
+	RequestTimeout           time.Duration
+	WarmWorkerLimit          int
+	MaxActiveWorkers         int
+	WarmStartupConcurrency   int
+	PerAccountConcurrency    int
+	RoutingStrategy          string
+	AccountOrder             string
+	MaxAccountSwitches       int
+	AccountSwitchInterval    string
+	MaxQuotaSwitches         string
+	UpstreamChannels         []string
+	ModelMapping             string
+	ModelChannels            string
+	ModelAccounts            string
+	WAABackend               string
+	MediaOutput              string
+	MediaBaseURL             string
+	GeminiBridgeEnabled      bool
+	GeminiBridgeOrigin       string
+	GeminiBridgeInterval     time.Duration
+	GeminiBridgePairingToken string
+	GeminiBridgeInclude      string
 	// Invalid 是加载时取值无效、改用默认值的配置项
 	Invalid []InvalidValue
 	// Environment 是取自进程环境变量、覆盖 .env 的配置键
@@ -232,6 +244,8 @@ func Default() Config {
 		UpstreamChannels:       []string{"playground"},
 		WAABackend:             WAABackendSpiderMonkey,
 		MediaOutput:            MediaOutputInline,
+		GeminiBridgeOrigin:     defaultGeminiBridgeOrigin,
+		GeminiBridgeInterval:   defaultGeminiBridgeInterval,
 	}
 }
 
@@ -243,7 +257,7 @@ type InvalidValue struct {
 }
 
 // secretKeys 是取值可能含凭据的配置键，无效时不记录原值
-var secretKeys = []string{"PROXY", "PROXY_API_KEY", "API_KEY_ACCOUNTS", "ADMIN_PASSWORD"}
+var secretKeys = []string{"PROXY", "PROXY_API_KEY", "API_KEY_ACCOUNTS", "ADMIN_PASSWORD", "GEMINI_BRIDGE_PAIRING_TOKEN"}
 
 // invalidValue 返回无效配置项的记录，凭据键不带原值
 func invalidValue(key, value string, err error) InvalidValue {
@@ -255,53 +269,58 @@ func invalidValue(key, value string, err error) InvalidValue {
 
 // configSetters 把每个配置键的文本值解析到 Config
 var configSetters = map[string]func(*Config, string) error{
-	"AUTO_START":               boolSetter("AUTO_START", func(c *Config) *bool { return &c.AutoStart }),
-	"HIDE_DOCK_ICON":           boolSetter("HIDE_DOCK_ICON", func(c *Config) *bool { return &c.HideDockIcon }),
-	"REQUEST_BODY_LOG":         boolSetter("REQUEST_BODY_LOG", func(c *Config) *bool { return &c.RequestBodyLog }),
-	"LOG_FILE":                 boolSetter("LOG_FILE", func(c *Config) *bool { return &c.LogFile }),
-	"ADMIN_AUTH_ENABLED":       boolSetter("ADMIN_AUTH_ENABLED", func(c *Config) *bool { return &c.AdminAuthEnabled }),
-	"BUILD_NATIVE_NONSTREAM":   boolSetter("BUILD_NATIVE_NONSTREAM", func(c *Config) *bool { return &c.BuildNativeNonstream }),
-	"NONSTREAM_KEEPALIVE":      boolSetter("NONSTREAM_KEEPALIVE", func(c *Config) *bool { return &c.NonstreamKeepalive }),
-	"FAKE_STREAM":              boolSetter("FAKE_STREAM", func(c *Config) *bool { return &c.FakeStream }),
-	"SEARCH_MODEL_ALIASES":     boolSetter("SEARCH_MODEL_ALIASES", func(c *Config) *bool { return &c.SearchModelAliases }),
-	"DISCOVER_HIDDEN_MODELS":   boolSetter("DISCOVER_HIDDEN_MODELS", func(c *Config) *bool { return &c.DiscoverHiddenModels }),
-	"GOOGLE_SEARCH":            boolSetter("GOOGLE_SEARCH", func(c *Config) *bool { return &c.GoogleSearch }),
-	"YOUTUBE_LINKS":            boolSetter("YOUTUBE_LINKS", func(c *Config) *bool { return &c.YouTubeLinks }),
-	"STRIP_THOUGHT_SIGNATURES": boolSetter("STRIP_THOUGHT_SIGNATURES", func(c *Config) *bool { return &c.StripThoughtSignatures }),
-	"CONTINUATION_REWRITE":     boolSetter("CONTINUATION_REWRITE", func(c *Config) *bool { return &c.ContinuationRewrite }),
-	"REPLY_TOOL":               boolSetter("REPLY_TOOL", func(c *Config) *bool { return &c.ReplyTool }),
-	"USER_MESSAGE_REWRITE":     textSetter(func(c *Config) *string { return &c.UserMessageRewrite }, lowerTrim),
-	"THINKING_GUARD":           boolSetter("THINKING_GUARD", func(c *Config) *bool { return &c.ThinkingGuard }),
-	"LOG_MAX_TOTAL_MB":         intSetter("LOG_MAX_TOTAL_MB", func(c *Config) *int { return &c.LogMaxTotalMB }),
-	"WARM_WORKER_LIMIT":        intSetter("WARM_WORKER_LIMIT", func(c *Config) *int { return &c.WarmWorkerLimit }),
-	"MAX_ACTIVE_WORKERS":       intSetter("MAX_ACTIVE_WORKERS", func(c *Config) *int { return &c.MaxActiveWorkers }),
-	"WARM_STARTUP_CONCURRENCY": intSetter("WARM_STARTUP_CONCURRENCY", func(c *Config) *int { return &c.WarmStartupConcurrency }),
-	"PER_ACCOUNT_CONCURRENCY":  intSetter("PER_ACCOUNT_CONCURRENCY", func(c *Config) *int { return &c.PerAccountConcurrency }),
-	"MAX_ACCOUNT_SWITCHES":     setMaxAccountSwitches,
-	"ACCOUNT_SWITCH_INTERVAL":  textSetter(func(c *Config) *string { return &c.AccountSwitchInterval }, lowerTrim),
-	"MAX_QUOTA_SWITCHES":       textSetter(func(c *Config) *string { return &c.MaxQuotaSwitches }, lowerTrim),
-	"INIT_TIMEOUT":             durationSetter("INIT_TIMEOUT", func(c *Config) *time.Duration { return &c.InitTimeout }),
-	"REQUEST_TIMEOUT":          durationSetter("REQUEST_TIMEOUT", func(c *Config) *time.Duration { return &c.RequestTimeout }),
-	"ADMIN_USERNAME":           textSetter(func(c *Config) *string { return &c.AdminUsername }, strings.TrimSpace),
-	"ADMIN_PASSWORD":           textSetter(func(c *Config) *string { return &c.AdminPassword }, func(value string) string { return value }),
-	"FIRST_EVENT_HEDGE":        textSetter(func(c *Config) *string { return &c.FirstEventHedge }, lowerTrim),
-	"FIRST_EVENT_HEDGE_MODELS": textSetter(func(c *Config) *string { return &c.FirstEventHedgeModels }, strings.TrimSpace),
-	"FIRST_EVENT_TIMEOUT":      textSetter(func(c *Config) *string { return &c.FirstEventTimeout }, lowerTrim),
-	"CONTINUATION_PROMPT":      textSetter(func(c *Config) *string { return &c.ContinuationPrompt }, strings.TrimSpace),
-	"AISTUDIO_AUTH_STATES":     textSetter(func(c *Config) *string { return &c.AuthStates }, strings.TrimSpace),
-	"LISTEN_ADDR":              textSetter(func(c *Config) *string { return &c.ListenAddr }, strings.TrimSpace),
-	"PREVIEW_LISTEN_ADDR":      textSetter(func(c *Config) *string { return &c.PreviewListenAddr }, strings.TrimSpace),
-	"PROXY_API_KEY":            textSetter(func(c *Config) *string { return &c.ProxyAPIKey }, strings.TrimSpace),
-	"PROXY":                    textSetter(func(c *Config) *string { return &c.Proxy }, strings.TrimSpace),
-	"ROUTING_STRATEGY":         textSetter(func(c *Config) *string { return &c.RoutingStrategy }, strings.TrimSpace),
-	"ACCOUNT_ORDER":            textSetter(func(c *Config) *string { return &c.AccountOrder }, strings.TrimSpace),
-	"MODEL_MAPPING":            textSetter(func(c *Config) *string { return &c.ModelMapping }, strings.TrimSpace),
-	"MODEL_CHANNELS":           textSetter(func(c *Config) *string { return &c.ModelChannels }, strings.TrimSpace),
-	"MODEL_ACCOUNTS":           textSetter(func(c *Config) *string { return &c.ModelAccounts }, strings.TrimSpace),
-	"API_KEY_ACCOUNTS":         textSetter(func(c *Config) *string { return &c.APIKeyAccounts }, strings.TrimSpace),
-	"WAA_BACKEND":              setWAABackend,
-	"MEDIA_OUTPUT":             textSetter(func(c *Config) *string { return &c.MediaOutput }, lowerTrim),
-	"MEDIA_BASE_URL":           textSetter(func(c *Config) *string { return &c.MediaBaseURL }, strings.TrimSpace),
+	"AUTO_START":                  boolSetter("AUTO_START", func(c *Config) *bool { return &c.AutoStart }),
+	"HIDE_DOCK_ICON":              boolSetter("HIDE_DOCK_ICON", func(c *Config) *bool { return &c.HideDockIcon }),
+	"REQUEST_BODY_LOG":            boolSetter("REQUEST_BODY_LOG", func(c *Config) *bool { return &c.RequestBodyLog }),
+	"LOG_FILE":                    boolSetter("LOG_FILE", func(c *Config) *bool { return &c.LogFile }),
+	"ADMIN_AUTH_ENABLED":          boolSetter("ADMIN_AUTH_ENABLED", func(c *Config) *bool { return &c.AdminAuthEnabled }),
+	"BUILD_NATIVE_NONSTREAM":      boolSetter("BUILD_NATIVE_NONSTREAM", func(c *Config) *bool { return &c.BuildNativeNonstream }),
+	"NONSTREAM_KEEPALIVE":         boolSetter("NONSTREAM_KEEPALIVE", func(c *Config) *bool { return &c.NonstreamKeepalive }),
+	"FAKE_STREAM":                 boolSetter("FAKE_STREAM", func(c *Config) *bool { return &c.FakeStream }),
+	"SEARCH_MODEL_ALIASES":        boolSetter("SEARCH_MODEL_ALIASES", func(c *Config) *bool { return &c.SearchModelAliases }),
+	"DISCOVER_HIDDEN_MODELS":      boolSetter("DISCOVER_HIDDEN_MODELS", func(c *Config) *bool { return &c.DiscoverHiddenModels }),
+	"GOOGLE_SEARCH":               boolSetter("GOOGLE_SEARCH", func(c *Config) *bool { return &c.GoogleSearch }),
+	"YOUTUBE_LINKS":               boolSetter("YOUTUBE_LINKS", func(c *Config) *bool { return &c.YouTubeLinks }),
+	"STRIP_THOUGHT_SIGNATURES":    boolSetter("STRIP_THOUGHT_SIGNATURES", func(c *Config) *bool { return &c.StripThoughtSignatures }),
+	"CONTINUATION_REWRITE":        boolSetter("CONTINUATION_REWRITE", func(c *Config) *bool { return &c.ContinuationRewrite }),
+	"REPLY_TOOL":                  boolSetter("REPLY_TOOL", func(c *Config) *bool { return &c.ReplyTool }),
+	"USER_MESSAGE_REWRITE":        textSetter(func(c *Config) *string { return &c.UserMessageRewrite }, lowerTrim),
+	"THINKING_GUARD":              boolSetter("THINKING_GUARD", func(c *Config) *bool { return &c.ThinkingGuard }),
+	"GEMINI_BRIDGE_ENABLED":       boolSetter("GEMINI_BRIDGE_ENABLED", func(c *Config) *bool { return &c.GeminiBridgeEnabled }),
+	"GEMINI_BRIDGE_ORIGIN":        textSetter(func(c *Config) *string { return &c.GeminiBridgeOrigin }, strings.TrimSpace),
+	"GEMINI_BRIDGE_INTERVAL":      durationSetter("GEMINI_BRIDGE_INTERVAL", func(c *Config) *time.Duration { return &c.GeminiBridgeInterval }),
+	"GEMINI_BRIDGE_PAIRING_TOKEN": textSetter(func(c *Config) *string { return &c.GeminiBridgePairingToken }, strings.TrimSpace),
+	"GEMINI_BRIDGE_INCLUDE":       textSetter(func(c *Config) *string { return &c.GeminiBridgeInclude }, strings.TrimSpace),
+	"LOG_MAX_TOTAL_MB":            intSetter("LOG_MAX_TOTAL_MB", func(c *Config) *int { return &c.LogMaxTotalMB }),
+	"WARM_WORKER_LIMIT":           intSetter("WARM_WORKER_LIMIT", func(c *Config) *int { return &c.WarmWorkerLimit }),
+	"MAX_ACTIVE_WORKERS":          intSetter("MAX_ACTIVE_WORKERS", func(c *Config) *int { return &c.MaxActiveWorkers }),
+	"WARM_STARTUP_CONCURRENCY":    intSetter("WARM_STARTUP_CONCURRENCY", func(c *Config) *int { return &c.WarmStartupConcurrency }),
+	"PER_ACCOUNT_CONCURRENCY":     intSetter("PER_ACCOUNT_CONCURRENCY", func(c *Config) *int { return &c.PerAccountConcurrency }),
+	"MAX_ACCOUNT_SWITCHES":        setMaxAccountSwitches,
+	"ACCOUNT_SWITCH_INTERVAL":     textSetter(func(c *Config) *string { return &c.AccountSwitchInterval }, lowerTrim),
+	"MAX_QUOTA_SWITCHES":          textSetter(func(c *Config) *string { return &c.MaxQuotaSwitches }, lowerTrim),
+	"INIT_TIMEOUT":                durationSetter("INIT_TIMEOUT", func(c *Config) *time.Duration { return &c.InitTimeout }),
+	"REQUEST_TIMEOUT":             durationSetter("REQUEST_TIMEOUT", func(c *Config) *time.Duration { return &c.RequestTimeout }),
+	"ADMIN_USERNAME":              textSetter(func(c *Config) *string { return &c.AdminUsername }, strings.TrimSpace),
+	"ADMIN_PASSWORD":              textSetter(func(c *Config) *string { return &c.AdminPassword }, func(value string) string { return value }),
+	"FIRST_EVENT_HEDGE":           textSetter(func(c *Config) *string { return &c.FirstEventHedge }, lowerTrim),
+	"FIRST_EVENT_HEDGE_MODELS":    textSetter(func(c *Config) *string { return &c.FirstEventHedgeModels }, strings.TrimSpace),
+	"FIRST_EVENT_TIMEOUT":         textSetter(func(c *Config) *string { return &c.FirstEventTimeout }, lowerTrim),
+	"CONTINUATION_PROMPT":         textSetter(func(c *Config) *string { return &c.ContinuationPrompt }, strings.TrimSpace),
+	"AISTUDIO_AUTH_STATES":        textSetter(func(c *Config) *string { return &c.AuthStates }, strings.TrimSpace),
+	"LISTEN_ADDR":                 textSetter(func(c *Config) *string { return &c.ListenAddr }, strings.TrimSpace),
+	"PREVIEW_LISTEN_ADDR":         textSetter(func(c *Config) *string { return &c.PreviewListenAddr }, strings.TrimSpace),
+	"PROXY_API_KEY":               textSetter(func(c *Config) *string { return &c.ProxyAPIKey }, strings.TrimSpace),
+	"PROXY":                       textSetter(func(c *Config) *string { return &c.Proxy }, strings.TrimSpace),
+	"ROUTING_STRATEGY":            textSetter(func(c *Config) *string { return &c.RoutingStrategy }, strings.TrimSpace),
+	"ACCOUNT_ORDER":               textSetter(func(c *Config) *string { return &c.AccountOrder }, strings.TrimSpace),
+	"MODEL_MAPPING":               textSetter(func(c *Config) *string { return &c.ModelMapping }, strings.TrimSpace),
+	"MODEL_CHANNELS":              textSetter(func(c *Config) *string { return &c.ModelChannels }, strings.TrimSpace),
+	"MODEL_ACCOUNTS":              textSetter(func(c *Config) *string { return &c.ModelAccounts }, strings.TrimSpace),
+	"API_KEY_ACCOUNTS":            textSetter(func(c *Config) *string { return &c.APIKeyAccounts }, strings.TrimSpace),
+	"WAA_BACKEND":                 setWAABackend,
+	"MEDIA_OUTPUT":                textSetter(func(c *Config) *string { return &c.MediaOutput }, lowerTrim),
+	"MEDIA_BASE_URL":              textSetter(func(c *Config) *string { return &c.MediaBaseURL }, strings.TrimSpace),
 	"UPSTREAM_CHANNELS": func(c *Config, value string) error {
 		c.UpstreamChannels = parseUpstreamChannels(value)
 		return nil
@@ -518,6 +537,28 @@ var configChecks = []configCheck{
 		}
 		return nil
 	}},
+	{[]string{"GEMINI_BRIDGE_ORIGIN"}, func(c Config) error {
+		if !c.GeminiBridgeEnabled || c.GeminiBridgeOrigin == "" {
+			return nil
+		}
+		parsed, err := url.Parse(c.GeminiBridgeOrigin)
+		if err != nil || parsed.Host == "" || parsed.User != nil ||
+			parsed.Path != "" && parsed.Path != "/" || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return fmt.Errorf("GEMINI_BRIDGE_ORIGIN 必须是实例 origin，例如 %s", defaultGeminiBridgeOrigin)
+		}
+		ip := net.ParseIP(parsed.Hostname())
+		loopback := strings.EqualFold(parsed.Hostname(), "localhost") || ip != nil && ip.IsLoopback()
+		if parsed.Scheme != "https" && (parsed.Scheme != "http" || !loopback) {
+			return fmt.Errorf("GEMINI_BRIDGE_ORIGIN 必须使用 HTTPS；只有本机地址可以使用 HTTP")
+		}
+		return nil
+	}},
+	{[]string{"GEMINI_BRIDGE_INTERVAL"}, func(c Config) error {
+		if c.GeminiBridgeEnabled && c.GeminiBridgeInterval <= 0 {
+			return fmt.Errorf("GEMINI_BRIDGE_INTERVAL 必须是正数时长")
+		}
+		return nil
+	}},
 }
 
 // Load 从指定 env 文件和进程环境加载配置，取值无效的项改用默认值并记入 Invalid，没写的常驻预热账户数与启动并发取默认值且不超过活动 Worker 上限，两者都没有 WAA 后端时按账户状态目录确定后端并追加到文件
@@ -652,54 +693,59 @@ func (c Config) KeepEnvironment(saved Config) Config {
 // envValues 返回每个配置键在 .env 中的文本值
 func (c Config) envValues() map[string]string {
 	return map[string]string{
-		"AUTO_START":               strconv.FormatBool(c.AutoStart),
-		"HIDE_DOCK_ICON":           strconv.FormatBool(c.HideDockIcon),
-		"REQUEST_BODY_LOG":         strconv.FormatBool(c.RequestBodyLog),
-		"LOG_FILE":                 strconv.FormatBool(c.LogFile),
-		"LOG_MAX_TOTAL_MB":         strconv.Itoa(c.LogMaxTotalMB),
-		"ADMIN_AUTH_ENABLED":       strconv.FormatBool(c.AdminAuthEnabled),
-		"ADMIN_USERNAME":           c.AdminUsername,
-		"ADMIN_PASSWORD":           c.AdminPassword,
-		"BUILD_NATIVE_NONSTREAM":   strconv.FormatBool(c.BuildNativeNonstream),
-		"NONSTREAM_KEEPALIVE":      strconv.FormatBool(c.NonstreamKeepalive),
-		"FAKE_STREAM":              strconv.FormatBool(c.FakeStream),
-		"YOUTUBE_LINKS":            strconv.FormatBool(c.YouTubeLinks),
-		"STRIP_THOUGHT_SIGNATURES": strconv.FormatBool(c.StripThoughtSignatures),
-		"SEARCH_MODEL_ALIASES":     strconv.FormatBool(c.SearchModelAliases),
-		"DISCOVER_HIDDEN_MODELS":   strconv.FormatBool(c.DiscoverHiddenModels),
-		"GOOGLE_SEARCH":            strconv.FormatBool(c.GoogleSearch),
-		"FIRST_EVENT_HEDGE":        c.FirstEventHedge,
-		"FIRST_EVENT_HEDGE_MODELS": c.FirstEventHedgeModels,
-		"FIRST_EVENT_TIMEOUT":      c.FirstEventTimeout,
-		"CONTINUATION_REWRITE":     strconv.FormatBool(c.ContinuationRewrite),
-		"CONTINUATION_PROMPT":      c.ContinuationPrompt,
-		"REPLY_TOOL":               strconv.FormatBool(c.ReplyTool),
-		"USER_MESSAGE_REWRITE":     c.UserMessageRewrite,
-		"THINKING_GUARD":           strconv.FormatBool(c.ThinkingGuard),
-		"AISTUDIO_AUTH_STATES":     c.AuthStates,
-		"LISTEN_ADDR":              c.ListenAddr,
-		"PREVIEW_LISTEN_ADDR":      c.PreviewListenAddr,
-		"PROXY_API_KEY":            c.ProxyAPIKey,
-		"PROXY":                    c.Proxy,
-		"INIT_TIMEOUT":             c.InitTimeout.String(),
-		"REQUEST_TIMEOUT":          c.RequestTimeout.String(),
-		"WARM_WORKER_LIMIT":        strconv.Itoa(c.WarmWorkerLimit),
-		"MAX_ACTIVE_WORKERS":       strconv.Itoa(c.MaxActiveWorkers),
-		"WARM_STARTUP_CONCURRENCY": strconv.Itoa(c.WarmStartupConcurrency),
-		"PER_ACCOUNT_CONCURRENCY":  strconv.Itoa(c.PerAccountConcurrency),
-		"ROUTING_STRATEGY":         c.RoutingStrategy,
-		"ACCOUNT_ORDER":            c.AccountOrder,
-		"MAX_ACCOUNT_SWITCHES":     strconv.Itoa(c.MaxAccountSwitches),
-		"ACCOUNT_SWITCH_INTERVAL":  c.AccountSwitchInterval,
-		"MAX_QUOTA_SWITCHES":       c.MaxQuotaSwitches,
-		"UPSTREAM_CHANNELS":        strings.Join(c.UpstreamChannels, ","),
-		"MODEL_MAPPING":            c.ModelMapping,
-		"MODEL_CHANNELS":           c.ModelChannels,
-		"MODEL_ACCOUNTS":           c.ModelAccounts,
-		"API_KEY_ACCOUNTS":         c.APIKeyAccounts,
-		"WAA_BACKEND":              c.WAABackend,
-		"MEDIA_OUTPUT":             c.MediaOutput,
-		"MEDIA_BASE_URL":           c.MediaBaseURL,
+		"AUTO_START":                  strconv.FormatBool(c.AutoStart),
+		"HIDE_DOCK_ICON":              strconv.FormatBool(c.HideDockIcon),
+		"REQUEST_BODY_LOG":            strconv.FormatBool(c.RequestBodyLog),
+		"LOG_FILE":                    strconv.FormatBool(c.LogFile),
+		"LOG_MAX_TOTAL_MB":            strconv.Itoa(c.LogMaxTotalMB),
+		"ADMIN_AUTH_ENABLED":          strconv.FormatBool(c.AdminAuthEnabled),
+		"ADMIN_USERNAME":              c.AdminUsername,
+		"ADMIN_PASSWORD":              c.AdminPassword,
+		"BUILD_NATIVE_NONSTREAM":      strconv.FormatBool(c.BuildNativeNonstream),
+		"NONSTREAM_KEEPALIVE":         strconv.FormatBool(c.NonstreamKeepalive),
+		"FAKE_STREAM":                 strconv.FormatBool(c.FakeStream),
+		"YOUTUBE_LINKS":               strconv.FormatBool(c.YouTubeLinks),
+		"STRIP_THOUGHT_SIGNATURES":    strconv.FormatBool(c.StripThoughtSignatures),
+		"SEARCH_MODEL_ALIASES":        strconv.FormatBool(c.SearchModelAliases),
+		"DISCOVER_HIDDEN_MODELS":      strconv.FormatBool(c.DiscoverHiddenModels),
+		"GOOGLE_SEARCH":               strconv.FormatBool(c.GoogleSearch),
+		"FIRST_EVENT_HEDGE":           c.FirstEventHedge,
+		"FIRST_EVENT_HEDGE_MODELS":    c.FirstEventHedgeModels,
+		"FIRST_EVENT_TIMEOUT":         c.FirstEventTimeout,
+		"CONTINUATION_REWRITE":        strconv.FormatBool(c.ContinuationRewrite),
+		"CONTINUATION_PROMPT":         c.ContinuationPrompt,
+		"REPLY_TOOL":                  strconv.FormatBool(c.ReplyTool),
+		"USER_MESSAGE_REWRITE":        c.UserMessageRewrite,
+		"THINKING_GUARD":              strconv.FormatBool(c.ThinkingGuard),
+		"AISTUDIO_AUTH_STATES":        c.AuthStates,
+		"LISTEN_ADDR":                 c.ListenAddr,
+		"PREVIEW_LISTEN_ADDR":         c.PreviewListenAddr,
+		"PROXY_API_KEY":               c.ProxyAPIKey,
+		"PROXY":                       c.Proxy,
+		"INIT_TIMEOUT":                c.InitTimeout.String(),
+		"REQUEST_TIMEOUT":             c.RequestTimeout.String(),
+		"WARM_WORKER_LIMIT":           strconv.Itoa(c.WarmWorkerLimit),
+		"MAX_ACTIVE_WORKERS":          strconv.Itoa(c.MaxActiveWorkers),
+		"WARM_STARTUP_CONCURRENCY":    strconv.Itoa(c.WarmStartupConcurrency),
+		"PER_ACCOUNT_CONCURRENCY":     strconv.Itoa(c.PerAccountConcurrency),
+		"ROUTING_STRATEGY":            c.RoutingStrategy,
+		"ACCOUNT_ORDER":               c.AccountOrder,
+		"MAX_ACCOUNT_SWITCHES":        strconv.Itoa(c.MaxAccountSwitches),
+		"ACCOUNT_SWITCH_INTERVAL":     c.AccountSwitchInterval,
+		"MAX_QUOTA_SWITCHES":          c.MaxQuotaSwitches,
+		"UPSTREAM_CHANNELS":           strings.Join(c.UpstreamChannels, ","),
+		"MODEL_MAPPING":               c.ModelMapping,
+		"MODEL_CHANNELS":              c.ModelChannels,
+		"MODEL_ACCOUNTS":              c.ModelAccounts,
+		"API_KEY_ACCOUNTS":            c.APIKeyAccounts,
+		"WAA_BACKEND":                 c.WAABackend,
+		"MEDIA_OUTPUT":                c.MediaOutput,
+		"MEDIA_BASE_URL":              c.MediaBaseURL,
+		"GEMINI_BRIDGE_ENABLED":       strconv.FormatBool(c.GeminiBridgeEnabled),
+		"GEMINI_BRIDGE_ORIGIN":        c.GeminiBridgeOrigin,
+		"GEMINI_BRIDGE_INTERVAL":      c.GeminiBridgeInterval.String(),
+		"GEMINI_BRIDGE_PAIRING_TOKEN": c.GeminiBridgePairingToken,
+		"GEMINI_BRIDGE_INCLUDE":       c.GeminiBridgeInclude,
 	}
 }
 

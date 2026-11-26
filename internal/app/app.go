@@ -165,6 +165,7 @@ func runService(ctx context.Context, cancel func(), cfg config.Config, options c
 		logService("WARN", "删除在线更新留下的旧版本失败", "error", err)
 	}
 	manager.pickPath = pickPath
+	startGeminiBridge(ctx, cfg, logService)
 	started, err = runServer(ctx, cfg, manager, updater, func(address string) {
 		ready <- serviceReady{url: address, log: logService}
 		go func() {
